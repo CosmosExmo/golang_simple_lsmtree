@@ -1,1 +1,14 @@
-#TODO: prepare docker compose file
+services:
+  app:
+    image: golang-app
+    restart: always
+    build:
+      context: src/
+      dockerfile: Dockerfile
+    stdin_open: true
+    tty: true
+    volumes:
+      - sstable_directory:/app/sstable_directory
+
+volumes:
+  sstable_directory:

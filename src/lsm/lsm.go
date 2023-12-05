@@ -3,7 +3,10 @@ package lsm
 import (
 	"fmt"
 	"odev_four/utils"
+	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 )
 
 type LSMTree struct {
@@ -15,13 +18,35 @@ type LSMTree struct {
 }
 
 func NewLSMTree(maxMemTable, maxSSTable int, sstablePrefix string) *LSMTree {
-	return &LSMTree{
+	lsmTree := &LSMTree{
 		MemTable:      make(map[int]string),
 		MaxMemTable:   maxMemTable,
 		MaxSSTable:    maxSSTable,
 		SSTablePrefix: sstablePrefix,
 	}
+
+	// SSTable dosyalarını tara ve listeye ekle.
+	lsmTree.loadSSTables()
+
+	return lsmTree
 }
+
+func (lsm *LSMTree) loadSSTables() {
+	filepath.Walk(lsm.SSTablePrefix, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+					fmt.Println("Error accessing path:", path)
+					return err
+			}
+
+			if !info.IsDir() && strings.HasSuffix(path, ".txt") {
+					// Dosya ismini SSTable listesine ekle.
+					lsm.SSTables = append(lsm.SSTables, SSTable{Filename: path})
+			}
+
+			return nil
+	})
+}
+
 
 func (lsm *LSMTree) Put(key int, value string) {
 	lsm.MemTable[key] = value
@@ -31,14 +56,30 @@ func (lsm *LSMTree) Put(key int, value string) {
 }
 
 func (lsm *LSMTree) Get(key int) (string, error) {
+	// Önce MemTable'da ara.
 	if val, ok := lsm.MemTable[key]; ok {
 		return val, nil
 	}
+	
+	// SSTable'larda ara.
 	for i := len(lsm.SSTables) - 1; i >= 0; i-- {
-		if val, ok := lsm.SSTables[i].Data[key]; ok {
+		sstable := &lsm.SSTables[i]
+		
+		// Eğer SSTable bellekte yoksa, dosyadan oku.
+		if sstable.Data == nil {
+			data, err := utils.ReadFromFile(sstable.Filename)
+			if err != nil {
+				return "", fmt.Errorf("error reading SSTable from file: %s, error: %v", sstable.Filename, err)
+			}
+			sstable.Data = data
+		}
+
+		// Bellekteki SSTable'da anahtarı ara.
+		if val, ok := sstable.Data[key]; ok {
 			return val, nil
 		}
 	}
+
 	return "", fmt.Errorf("key not found: %d", key)
 }
 
